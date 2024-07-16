@@ -96,24 +96,52 @@
   category: windows
 - name: array
   description: |
-    Create an array with all the args.
+    Create an array.
 
-    This function accepts arbitrary arguments and creates an array by
-    flattening the arguments.
-
-    ### Examples
+    This function is the array constructor. It can be used to build an
+    array from a number of args (Note that since VQL always uses
+    keyword args you need to give each arg a name but this name is
+    actually ignored in this function):
 
     ```vql
     array(a=1, b=2) -> [1, 2]
     ```
 
-    You can use this to flatten a subquery as well:
+    The function does not flatten the arguments so providing lists as
+    parameters will form a nested list:
 
     ```vql
-    SELECT array(a1={ SELECT User FROM Artifact.Windows.System.Users() }) as Users FROM scope()
+    array(a=[1,2]) -> [ [1, 2] ]
     ```
 
-    Will return a single row with Users being an array of names.
+    You can use the `_` argument to build the array from another
+    object:
+
+    ```vql
+    array(_=[1, 2]) -> [1, 2]
+    ```
+
+    You can use a subquery to built the object from another
+    query. This is called `materializing` the query because the query
+    will be expanded into memory (be careful about materializing a
+    very large query here!)
+
+    Note that materializing a query will give a list of dicts() since
+    each row in a query is a dict.
+
+    ```vql
+    array(_={ SELECT User FROM Artifact.Windows.System.Users() }) -> [{"User": "Bob"}, {"User": "Fred"}]
+    ```
+
+    To collapse to a simple list of users, simply reference the User
+    field:
+
+    ```vql
+    array(_={ SELECT User FROM Artifact.Windows.System.Users() }).User -> ["Bob", "Fred"]
+    ```
+
+    This works because the `.` operator on a list, creates another
+    list with the `.` operator applying on each member.
   type: Function
   category: basic
 - name: artifact_definitions
@@ -2244,7 +2272,6 @@
       globs="C:/Users/*/*",
       recursion_callback="x=> NOT x.OSPath =~ Exclude")
     ```
-
   type: Plugin
   version: 3
   args:
@@ -4361,7 +4388,7 @@
     entry including listing all its attributes.
 
     It can either operate on an image file or the raw device (on
-    windows).
+    windows), or alternatively you can provide a raw $MFT file.
 
     ### Example:
 
@@ -4374,6 +4401,22 @@
 
     You can get the MFT entry number from `parse_mft()` or from the
     Data attribute of a `glob()` using the `ntfs` accessor.
+
+    ### Example 2: Using a raw $MFT file
+
+    If you have previously collected the $MFT file (e.g. using the
+    `Windows.KapeFiles.Targets` artifact, you can use `parse_ntfs()`
+    to get more information about each MFT entry:
+
+    ```vql
+    SELECT EntryNumber, OSPath,
+       parse_ntfs(mft_filename=MFTFile, mft=EntryNumber) AS Details
+    FROM parse_mft(filename=MFTFile)
+    ```
+
+    Note that the raw $MFT file is sometimes not sufficient to
+    reconstruct all attributes (for example if attributes are not
+    stored in the $MFT but in external clusters).
   type: Function
   args:
   - name: device
@@ -4384,6 +4427,9 @@
     type: accessors.OSPath
     description: A raw image to open. You can also provide the accessor if using a
       raw image file.
+  - name: mft_filename
+    type: accessors.OSPath
+    description: A path to a raw $MFT file to parse.
   - name: accessor
     type: string
     description: The accessor to use.
@@ -4403,6 +4449,9 @@
 
     This is similar in use to the parse_ntfs() function but parses the
     $I30 stream.
+
+    Note: You can also use a raw $MFT file to operate on - see
+    `parse_ntfs()` for a full description.
   type: Plugin
   args:
   - name: device
@@ -4413,6 +4462,9 @@
     type: accessors.OSPath
     description: A raw image to open. You can also provide the accessor if using a
       raw image file.
+  - name: mft_filename
+    type: accessors.OSPath
+    description: A path to a raw $MFT file to parse.
   - name: accessor
     type: string
     description: The accessor to use.
@@ -4427,7 +4479,11 @@
     description: The offset to the MFT entry to parse.
   category: parsers
 - name: parse_ntfs_ranges
-  description: Show the run ranges for an NTFS stream.
+  description: |
+    Show the run ranges for an NTFS stream.
+
+    Note: You can also use a raw $MFT file to operate on - see
+    `parse_ntfs()` for a full description.
   type: Plugin
   args:
   - name: device
@@ -4438,6 +4494,9 @@
     type: accessors.OSPath
     description: A raw image to open. You can also provide the accessor if using a
       raw image file.
+  - name: mft_filename
+    type: accessors.OSPath
+    description: A path to a raw $MFT file to parse.
   - name: accessor
     type: string
     description: The accessor to use.
@@ -5149,6 +5208,11 @@
   - name: env
     type: ordereddict.Dict
     description: A dict of args to insert into the scope.
+  - name: copy_env
+    type: string
+    description: A list of variables in the current scope that will be copied into
+      the new scope.
+    repeated: true
   - name: cpu_limit
     type: float64
     description: Average CPU usage in percent of a core.
@@ -6147,6 +6211,16 @@
   category: plugin
   metadata:
     permissions: FILESYSTEM_WRITE
+- name: threads
+  description: Enumerate threads in a process.
+  type: Plugin
+  args:
+  - name: pid
+    type: int64
+    description: The PID to get the thread for.
+    required: true
+  metadata:
+    permissions: MACHINE_STATE
 - name: timeline
   description: Read a timeline. You can create a timeline with the timeline_add()
     function
@@ -6292,7 +6366,6 @@
     SELECT timestamp(epoch=timestamp(epoch="2024-03-26T06:53:37Z").Unix - 86400)
     FROM scope()
     ```
-
   type: Function
   args:
   - name: epoch
@@ -7052,6 +7125,17 @@
   - name: timeout
     type: uint64
     description: If provided we stop after this much time
+  - name: capture_state
+    type: bool
+    description: If true, capture the state of the provider when the event is triggered
+  - name: enable_map_info
+    type: bool
+    description: Resolving MapInfo with TdhGetEventMapInformation is very expensive
+      and causes events to be dropped so we disabled it by default. Enable with this
+      flag.
+  - name: description
+    type: string
+    description: Description for this GUID provider
   category: event
 - name: watch_evtx
   description: |
@@ -7157,6 +7241,49 @@
     type: string
     description: Object namespace path.
   category: windows
+  metadata:
+    permissions: MACHINE_STATE
+- name: winpmem
+  description: |
+    Uses the `winpmem` driver to take a memory image.
+
+    This plugin is also needed to facilitate the winpmem accessor.
+
+    When the `image_path` parameter is not set this function will load
+    the `winpmem` driver until the scope is destroyed at the end of
+    the query (where the driver will be unloaded).
+
+    If the `image_path` parameter is give, the path will be used to
+    create a raw memory image. The image can be compressed using a
+    number of algorithms such as:
+
+    1. None - no compression (default)
+
+    2. S2 or snappy - these are fast algorithms with poor compression
+       ratio but should result in some speed up over no compression.
+
+    3. The Gzip method is used to produce a compatible gzip file. This
+       is very slow and so it is not suitable for large memory systems
+       as there will be too much smear.
+
+
+    # Example
+
+    ```vql
+    SELECT winpmem(image_path='c:/test.dd', compression='s2') FROM scope()"
+    ```
+  type: Function
+  args:
+  - name: service
+    type: string
+    description: The name of the driver service to install.
+  - name: image_path
+    type: string
+    description: If specified we write a physical memory image on this path.
+  - name: compression
+    type: string
+    description: When writing a memory image use this compression (default none) can
+      be none, s2, snappy, gzip.
   metadata:
     permissions: MACHINE_STATE
 - name: wmi
@@ -7425,3 +7552,4 @@
   category: plugin
   metadata:
     permissions: FILESYSTEM_READ
+

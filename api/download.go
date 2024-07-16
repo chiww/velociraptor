@@ -125,6 +125,9 @@ func vfsFileDownloadHandler() http.Handler {
 		if org_id == "" {
 			org_id = authenticators.GetOrgIdFromRequest(r)
 		}
+
+		org_id = utils.NormalizedOrgId(org_id)
+
 		org_manager, err := services.GetOrgManager()
 		if err != nil {
 			returnError(w, 404, err.Error())

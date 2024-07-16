@@ -121,9 +121,9 @@ export default class VeloReportViewer extends React.Component {
             }
             this.setState(new_state);
         }).catch((err) => {
-            let response = err.response && err.response.data;
+            let response = err.response && (err.response.data || err.response.message);
             if (response) {
-                let templ = "<div class='no-content'>" + response.message + "</div>";
+                let templ = "<div class='no-content'>" + response + "</div>";
                 this.setState({"template": templ,loading: false});
             } else {
                 this.setState({"template": "Error " + err.message, loading: false});
@@ -166,7 +166,8 @@ export default class VeloReportViewer extends React.Component {
                     } catch(e) {};
                 }
 
-                if (domNode.name === "grr-csv-viewer") {
+                if (domNode.name === "velo-csv-viewer" ||
+                    domNode.name === "grr-csv-viewer") {
                     // Figure out where the data is: attribs.value is something like data['table2']
                     let re = /'([^']+)'/;
                     let value = decodeURIComponent(domNode.attribs.value || "");
@@ -192,7 +193,8 @@ export default class VeloReportViewer extends React.Component {
                     }
                 };
 
-                if (domNode.name === "grr-tool-viewer") {
+                if (domNode.name === "velo-tool-viewer" ||
+                    domNode.name === "grr-tool-viewer") {
                     let name = decodeURIComponent(domNode.attribs.name ||"");
                     let tool_version = decodeURIComponent(
                         domNode.attribs.version ||"");
@@ -203,20 +205,23 @@ export default class VeloReportViewer extends React.Component {
                     );
                 };
 
-                if (domNode.name === "grr-timeline") {
+                if (domNode.name === "velo-timeline" ||
+                    domNode.name === "grr-timeline") {
                     let name = decodeURIComponent(domNode.attribs.name ||"");
                     return (
                         <Timeline name={name}/>
                     );
                 };
 
-                if (domNode.name === "velo-value") {
+                if (domNode.name === "velo-value" ||
+                    domNode.name === "grr-value") {
                     let value = decodeURIComponent(domNode.attribs.value || "");
                     return <VeloValueRenderer value={value}/>;
 
                 };
 
-                if (domNode.name === "grr-line-chart") {
+                if (domNode.name === "velo-line-chart" ||
+                    domNode.name === "grr-line-chart") {
                     // Figure out where the data is: attribs.value is
                     // something like data['table2']
                     let re = /'([^']+)'/;

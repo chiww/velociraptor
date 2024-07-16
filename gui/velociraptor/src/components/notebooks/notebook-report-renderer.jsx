@@ -16,6 +16,8 @@ import { NotebookLineChart, NotebookTimeChart,
          NotebookScatterChart, NotebookBarChart
        } from './notebook-chart-renderer.jsx';
 
+import ToolViewer from "../tools/tool-viewer.jsx";
+
 import NotebookTableRenderer from './notebook-table-renderer.jsx';
 
 import VeloValueRenderer from '../utils/value.jsx';
@@ -74,10 +76,12 @@ export default class NotebookReportRenderer extends React.Component {
         let rows = JSONparse(data.Response, []);
 
         switch  (domNode.name) {
+        case "velo-line-chart":
         case "grr-line-chart":
                     return <VeloLineChart data={rows}
                                           columns={data.Columns}
                                           params={parse_param(domNode)} />;
+
         case  "time-chart":
                     return <VeloTimeChart data={rows}
                                           columns={data.Columns}
@@ -105,6 +109,7 @@ export default class NotebookReportRenderer extends React.Component {
             return result;
         }
 
+        let cell_id = this.props.cell && this.props.cell.cell_id;
         let template = parseHTML(this.props.cell.output, {
             replace: (domNode) => {
                 // A table which contains the data inline.
@@ -130,12 +135,14 @@ export default class NotebookReportRenderer extends React.Component {
                     };
                 }
 
-                if (domNode.name === "velo-value") {
+                if (domNode.name === "velo-value" ||
+                    domNode.name === "grr-value") {
                     let value = decodeURIComponent(domNode.attribs.value || "");
                     return <VeloValueRenderer value={value}/>;
                 };
 
-                if (domNode.name === "grr-timeline") {
+                if (domNode.name === "velo-timeline" ||
+                    domNode.name === "grr-timeline") {
                     let name = decodeURIComponent(domNode.attribs.name || "");
                     return (
                         <TimelineRenderer
@@ -145,8 +152,18 @@ export default class NotebookReportRenderer extends React.Component {
                     );
                 };
 
+                if (domNode.name ===  "velo-tool-viewer"||
+                    domNode.name === "grr-tool-viewer") {
+                    let name = decodeURIComponent(domNode.attribs.name ||"");
+                    let tool_version = decodeURIComponent(
+                        domNode.attribs.version ||"");
+                    return <ToolViewer name={name}
+                                       tool_version={tool_version}/>;
+                };
+
                 // A tag that loads a table from a notebook cell.
-                if (domNode.name === "grr-csv-viewer") {
+                if (domNode.name === "velo-csv-viewer" ||
+                    domNode.name === "grr-csv-viewer") {
                     try {
                         return (
                             <NotebookTableRenderer
@@ -154,6 +171,7 @@ export default class NotebookReportRenderer extends React.Component {
                               refresh={this.props.refresh}
                               params={parse_param(domNode)}
                               completion_reporter={this.props.completion_reporter}
+                              name={cell_id}
                             />
                         );
                     } catch(e) {

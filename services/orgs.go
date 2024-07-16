@@ -11,14 +11,15 @@ import (
 )
 
 const (
-	ROOT_ORG_ID = "root"
+	ROOT_ORG_ID   = "root"
+	ROOT_ORG_NAME = "<root>"
 )
 
 var (
 	mu          sync.Mutex
 	org_manager OrgManager
 
-	NotFoundError = errors.New("Org not found")
+	OrgNotFoundError = errors.New("Org not found")
 )
 
 // Currently the org manager is the only binary wide global - all
@@ -83,7 +84,7 @@ type OrgManager interface {
 
 func GetOrgName(config_obj *config_proto.Config) string {
 	if config_obj.OrgId == "" {
-		return "Root Org"
+		return ROOT_ORG_NAME
 	}
 
 	return fmt.Sprintf("Org %v (%v)",
